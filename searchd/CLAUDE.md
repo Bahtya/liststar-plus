@@ -71,10 +71,28 @@ Protobuf files are automatically compiled during build via `build.rs`. The proto
 7. On disconnect, loop back to accept
 
 ### IPC Protocol Details
-- **Format**: `[4 bytes u32 length][protobuf payload]`
-- **Endianness**: Little-endian
-- **Message Type Detection**: MVP tries to decode as each message type in order (Ping → BuildIndex → Search)
-- **Error Handling**: Returns empty results on error, never panics
+
+**Current Protocol Format (v2):**
+```
+[1 byte message type][4 bytes u32 length][protobuf payload]
+```
+
+**Message Types:**
+- `0` = Ping
+- `1` = BuildIndex
+- `2` = Search
+
+**Protocol Evolution:**
+- Initial version used only length-prefix, causing message type ambiguity
+- Current version adds 1-byte type field for explicit message identification
+- Endianness: Little-endian for length field
+- Error Handling: Returns empty results on error, never panics
+
+**Implementation Notes:**
+- Empty messages (length = 0) are valid (e.g., PingReq)
+- Server reads: type byte → length (4 bytes) → payload (if length > 0)
+- Client must send all three parts in correct order
+- Response format: `[4 bytes length][protobuf payload]` (no type byte in response)
 
 ## Important Constraints
 

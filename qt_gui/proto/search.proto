@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package search.ipc;
+
+message PingReq {}
+
+message PingResp {
+  string version = 1;
+}
+
+message BuildIndexReq {
+  repeated string roots = 1;
+}
+
+message BuildIndexResp {
+  bool success = 1;
+  uint64 indexed_files = 2;
+}
+
+message SearchReq {
+  string keyword = 1;
+  uint32 limit = 2;
+}
+
+message SearchResp {
+  repeated SearchResult results = 1;
+}
+
+message SearchResult {
+  string path = 1;
+  string filename = 2;
+}

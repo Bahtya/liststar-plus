@@ -62,13 +62,17 @@ impl NamedPipeServer {
         let mut bytes_read = 0u32;
 
         unsafe {
-            ReadFile(
+            let result = ReadFile(
                 self.pipe_handle,
                 Some(buffer),
                 Some(&mut bytes_read),
                 None,
-            )
-            .context("Failed to read from pipe")?;
+            );
+
+            if result.is_err() {
+                let err = std::io::Error::last_os_error();
+                anyhow::bail!("Failed to read from pipe: {}", err);
+            }
         }
 
         Ok(bytes_read as usize)
@@ -79,13 +83,17 @@ impl NamedPipeServer {
         let mut bytes_written = 0u32;
 
         unsafe {
-            WriteFile(
+            let result = WriteFile(
                 self.pipe_handle,
                 Some(data),
                 Some(&mut bytes_written),
                 None,
-            )
-            .context("Failed to write to pipe")?;
+            );
+
+            if result.is_err() {
+                let err = std::io::Error::last_os_error();
+                anyhow::bail!("Failed to write to pipe: {}", err);
+            }
         }
 
         Ok(bytes_written as usize)
