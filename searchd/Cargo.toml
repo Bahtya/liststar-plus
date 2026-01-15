@@ -1,0 +1,36 @@
+[package]
+name = "searchd"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Windows API
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_Pipes",
+    "Win32_Security",
+] }
+
+# Protobuf
+prost = "0.13"
+bytes = "1.5"
+
+# Async runtime (for Named Pipe server)
+tokio = { version = "1.35", features = ["full"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+
+[build-dependencies]
+prost-build = "0.13"
