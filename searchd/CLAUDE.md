@@ -138,9 +138,43 @@ Protobuf files are automatically compiled during build via `build.rs`. The proto
 - Skip inaccessible directories during indexing
 
 ## Testing
+
+### Unit Tests
 - Unit tests exist in each module (marked with `#[cfg(test)]`)
 - Tests use simple assertions on core functionality
-- No integration tests or end-to-end tests in MVP
+- Run with: `cargo test`
+
+### IPC Integration Testing
+A Python test client is provided for end-to-end IPC testing:
+
+```bash
+# Test all IPC operations (Ping, BuildIndex, Search)
+python test_ipc_full.py
+
+# Simple connection test
+python test_simple.py
+```
+
+**Test Client Requirements:**
+- Python 3.x
+- `pywin32` package: `pip install pywin32`
+
+**What the tests verify:**
+1. **Ping Test**: Connection and version retrieval
+2. **BuildIndex Test**: Directory scanning and index building
+3. **Search Test**: Filename search with substring matching
+
+**Expected Results:**
+- Ping returns version "0.1.0"
+- BuildIndex successfully indexes files from specified directories
+- Search returns matching files with full paths
+
+**Test Output Example:**
+```
+✓ Ping test PASSED - Version: 0.1.0
+✓ BuildIndex test PASSED - Success: True, Indexed files: 14
+✓ Search test PASSED - Found 4 results for 'mod'
+```
 
 ## Dependencies
 - **windows**: Windows API bindings
@@ -151,7 +185,122 @@ Protobuf files are automatically compiled during build via `build.rs`. The proto
 
 ## Logging
 Set `RUST_LOG` environment variable to control log level:
+
+**PowerShell:**
+```powershell
+$env:RUST_LOG="debug"
+cargo run
+```
+
+**Bash:**
 ```bash
 RUST_LOG=debug cargo run
 RUST_LOG=info cargo run
 ```
+
+**Log Levels:**
+- `error` - Only errors
+- `warn` - Warnings and errors
+- `info` - General information (default)
+- `debug` - Detailed debugging information
+- `trace` - Very verbose tracing
+
+**Useful Debug Commands:**
+```powershell
+# Run with debug logging to troubleshoot IPC issues
+$env:RUST_LOG="debug"
+cargo run
+
+# Check if service is running
+tasklist | findstr searchd
+
+# Test IPC connection
+python test_simple.py
+```
+
+## Troubleshooting
+
+### Build Issues
+
+**Problem: `protoc` not found**
+```
+Error: Could not find `protoc`
+```
+**Solution:** Install Protocol Buffers compiler:
+- Download from: https://github.com/protocolbuffers/protobuf/releases
+- Or use package manager: `choco install protoc` / `scoop install protobuf`
+
+**Problem: Build fails with "access denied"**
+```
+error: failed to remove file `target\debug\searchd.exe`
+Caused by: 拒绝访问。 (os error 5)
+```
+**Solution:** Stop the running searchd.exe process:
+```powershell
+taskkill /F /IM searchd.exe
+```
+
+### IPC Issues
+
+**Problem: Client can't connect - "All pipe instances are busy"**
+```
+pywintypes.error: (231, 'CreateFile', '所有的管道范例都在使用中。')
+```
+**Solution:**
+- Only one client can connect at a time (MVP limitation)
+- Wait for previous client to disconnect
+- Or restart the searchd service
+
+**Problem: Client hangs waiting for response**
+**Solution:**
+- Check server logs with `RUST_LOG=debug`
+- Verify message type byte is correct (0=Ping, 1=BuildIndex, 2=Search)
+- Ensure payload length matches actual payload size
+
+**Problem: "Failed to read from pipe" error**
+**Solution:**
+- This usually means the client disconnected unexpectedly
+- Check client-side error messages
+- Verify protocol format: `[1 byte type][4 bytes length][payload]`
+
+## Quick Start Guide
+
+1. **Build the project:**
+   ```bash
+   cargo build
+   ```
+
+2. **Run the daemon:**
+   ```powershell
+   $env:RUST_LOG="info"
+   cargo run
+   ```
+
+3. **In another terminal, test the IPC:**
+   ```bash
+   python test_ipc_full.py
+   ```
+
+4. **Expected output:**
+   - Server: `Named Pipe server started, waiting for connections...`
+   - Client: `✓ ALL TESTS PASSED!`
+
+## Next Steps for Development
+
+### Implementing Qt Client
+The Qt client should implement the same IPC protocol:
+1. Connect to `\\.\pipe\listory_plus_search`
+2. Send messages with format: `[1 byte type][4 bytes length][payload]`
+3. Read responses with format: `[4 bytes length][payload]`
+4. Use Qt's Protobuf support or manual encoding
+
+### Performance Optimization
+- Replace `std::fs::read_dir` with direct MFT reading for faster indexing
+- Implement proper USN Journal monitoring for real-time updates
+- Add multi-threading for concurrent search requests (requires protocol changes)
+
+### Feature Additions
+- Content search indexing (currently uses ripgrep)
+- Search result ranking/scoring
+- Filter by file type, size, date
+- Regular expression support
