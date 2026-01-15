@@ -51,9 +51,48 @@ async fn main() -> Result<()> {
 /// Handle a single client connection
 async fn handle_client(server: &NamedPipeServer, handler: Arc<RequestHandler>) -> Result<()> {
     loop {
+        // Read message type (1 byte)
+        let mut type_buf = [0u8; 1];
+        log::debug!("Waiting to read message type...");
+
+        let bytes_read = match server.read(&mut type_buf) {
+            Ok(n) => {
+                log::debug!("Read {} bytes for message type", n);
+                n
+            }
+            Err(e) => {
+                log::error!("Failed to read message type: {}", e);
+                return Err(e);
+            }
+        };
+
+        if bytes_read == 0 {
+            log::info!("Client disconnected");
+            break;
+        }
+
+        if bytes_read < 1 {
+            log::warn!("Incomplete message type received");
+            break;
+        }
+
+        let msg_type = type_buf[0];
+        log::debug!("Message type: {}", msg_type);
+
         // Read length prefix (4 bytes)
         let mut length_buf = [0u8; 4];
-        let bytes_read = server.read(&mut length_buf)?;
+        log::debug!("Waiting to read length prefix...");
+
+        let bytes_read = match server.read(&mut length_buf) {
+            Ok(n) => {
+                log::debug!("Read {} bytes for length prefix", n);
+                n
+            }
+            Err(e) => {
+                log::error!("Failed to read length prefix: {}", e);
+                return Err(e);
+            }
+        };
 
         if bytes_read == 0 {
             log::info!("Client disconnected");
@@ -61,53 +100,65 @@ async fn handle_client(server: &NamedPipeServer, handler: Arc<RequestHandler>) -
         }
 
         if bytes_read < 4 {
-            log::warn!("Incomplete length prefix received");
+            log::warn!("Incomplete length prefix received: {} bytes", bytes_read);
             break;
         }
 
         let msg_length = u32::from_le_bytes(length_buf) as usize;
+        log::debug!("Message length: {} bytes", msg_length);
 
-        // Read message payload
-        let mut msg_buf = vec![0u8; msg_length];
-        let bytes_read = server.read(&mut msg_buf)?;
+        // Read message payload (if any)
+        let msg_buf = if msg_length > 0 {
+            let mut buf = vec![0u8; msg_length];
+            let bytes_read = match server.read(&mut buf) {
+                Ok(n) => {
+                    log::debug!("Read {} bytes for payload", n);
+                    n
+                }
+                Err(e) => {
+                    log::error!("Failed to read payload: {}", e);
+                    return Err(e);
+                }
+            };
 
-        if bytes_read < msg_length {
-            log::warn!("Incomplete message received");
-            break;
+            if bytes_read < msg_length {
+                log::warn!("Incomplete message received: expected {}, got {}", msg_length, bytes_read);
+                break;
+            }
+            buf
+        } else {
+            log::debug!("Empty message (length = 0)");
+            vec![]
+        };
+
+        // Decode and handle based on message type
+        match msg_type {
+            0 => {
+                // Ping
+                log::debug!("Received Ping request");
+                let req: PingReq = prost::Message::decode(&msg_buf[..])?;
+                let resp = handler.handle_ping(req).await?;
+                send_response(server, &resp)?;
+            }
+            1 => {
+                // BuildIndex
+                log::debug!("Received BuildIndex request");
+                let req: BuildIndexReq = prost::Message::decode(&msg_buf[..])?;
+                let resp = handler.handle_build_index(req).await?;
+                send_response(server, &resp)?;
+            }
+            2 => {
+                // Search
+                log::debug!("Received Search request");
+                let req: SearchReq = prost::Message::decode(&msg_buf[..])?;
+                let resp = handler.handle_search(req).await?;
+                send_response(server, &resp)?;
+            }
+            _ => {
+                log::warn!("Unknown message type: {}", msg_type);
+                break;
+            }
         }
-
-        // Try to decode as different request types
-        // In a real implementation, we'd have a message type field
-        // For MVP, we'll try each type in order
-
-        // Try Ping
-        if let Ok(req) = prost::Message::decode(&msg_buf[..]) {
-            let req: PingReq = req;
-            log::debug!("Received Ping request");
-            let resp = handler.handle_ping(req).await?;
-            send_response(server, &resp)?;
-            continue;
-        }
-
-        // Try BuildIndex
-        if let Ok(req) = prost::Message::decode(&msg_buf[..]) {
-            let req: BuildIndexReq = req;
-            log::debug!("Received BuildIndex request");
-            let resp = handler.handle_build_index(req).await?;
-            send_response(server, &resp)?;
-            continue;
-        }
-
-        // Try Search
-        if let Ok(req) = prost::Message::decode(&msg_buf[..]) {
-            let req: SearchReq = req;
-            log::debug!("Received Search request");
-            let resp = handler.handle_search(req).await?;
-            send_response(server, &resp)?;
-            continue;
-        }
-
-        log::warn!("Unknown message type received");
     }
 
     Ok(())

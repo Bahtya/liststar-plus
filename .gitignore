@@ -1,0 +1,90 @@
+# Rust
+/searchd/target/
+**/*.rs.bk
+*.pdb
+**/target/
+# Cargo
+Cargo.lock
+
+# Qt/C++ Build artifacts
+/qt_gui/build/
+/qt_gui/build-*/
+*.o
+*.obj
+*.so
+*.so.*
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.out
+*.app
+
+# Qt specific
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.qmlc
+*.jsc
+Makefile*
+*build-*
+*.autosave
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vcxproj.filters
+*.vcxproj.user
+
+# Protobuf generated files (uncomment if needed)
+# *.pb.cc
+# *.pb.h
+# *_pb2.py
+
+# OS specific
+Thumbs.db
+Desktop.ini
+.directory
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.cache
+
+# claude
+**/.claude/
