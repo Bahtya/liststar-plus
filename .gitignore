@@ -10,7 +10,7 @@ Cargo.lock
 
 # Qt/C++ Build artifacts
 /qt_gui/build/
-**/qt_gui/build-*/
+/qt_gui/build-*/
 *.o
 *.obj
 *.so
