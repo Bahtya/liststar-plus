@@ -38,7 +38,8 @@ pub fn search_content(keyword: &str, roots: &[String], limit: usize) -> Result<V
                 .unwrap_or(path)
                 .to_string();
 
-            results.push(FileEntry::new(path.to_string(), filename));
+            // Use backward compatibility method for content search
+            results.push(FileEntry::from_path_filename(path.to_string(), filename));
 
             if results.len() >= limit {
                 return Ok(results);

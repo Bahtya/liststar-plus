@@ -59,27 +59,54 @@ const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 pub fn build_mft_index(root: &str, index: &mut MemoryIndex) -> Result<u64> {
     log::info!("Building MFT index for: {}", root);
 
-    // Extract drive letter from path
-    let drive_letter = extract_drive_letter(root)?;
-    log::debug!("Extracted drive letter: {}", drive_letter);
+    // Check if this is a root drive (e.g., C:\, D:\)
+    // MFT enumeration indexes the entire drive, so only use it for root paths
+    if is_root_drive_path(root) {
+        // Extract drive letter from path
+        let drive_letter = extract_drive_letter(root)?;
+        log::debug!("Root drive detected, using MFT enumeration for drive {}", drive_letter);
 
-    // Try MFT-based indexing first, fall back to filesystem walk if it fails
-    match build_mft_index_fast(drive_letter, root, index) {
-        Ok(count) => {
-            log::info!("MFT-based indexing completed: {} files", count);
-            Ok(count)
+        // Try MFT-based indexing first, fall back to filesystem walk if it fails
+        match build_mft_index_fast(drive_letter, index) {
+            Ok(count) => {
+                log::info!("MFT-based indexing completed: {} files", count);
+                Ok(count)
+            }
+            Err(e) => {
+                log::warn!("MFT-based indexing failed: {}, falling back to filesystem walk", e);
+                let mut count = 0u64;
+                walk_directory(root, index, &mut count)?;
+                Ok(count)
+            }
         }
-        Err(e) => {
-            log::warn!("MFT-based indexing failed: {}, falling back to filesystem walk", e);
-            let mut count = 0u64;
-            walk_directory(root, index, &mut count)?;
-            Ok(count)
-        }
+    } else {
+        // For subdirectories, use filesystem walk
+        log::info!("Subdirectory detected, using filesystem walk");
+        let mut count = 0u64;
+        walk_directory(root, index, &mut count)?;
+        Ok(count)
     }
 }
 
+/// Check if path is a root drive (e.g., C:\, D:\)
+fn is_root_drive_path(path: &str) -> bool {
+    let path_chars: Vec<char> = path.chars().collect();
+
+    // Check for patterns like "C:\", "D:\", etc.
+    if path_chars.len() == 3 && path_chars[1] == ':' && (path_chars[2] == '\\' || path_chars[2] == '/') {
+        return path_chars[0].is_ascii_alphabetic();
+    }
+
+    // Also accept "C:", "D:" without trailing slash
+    if path_chars.len() == 2 && path_chars[1] == ':' {
+        return path_chars[0].is_ascii_alphabetic();
+    }
+
+    false
+}
+
 /// Fast MFT-based indexing using USN Journal enumeration
-fn build_mft_index_fast(drive_letter: char, _root_path: &str, index: &mut MemoryIndex) -> Result<u64> {
+fn build_mft_index_fast(drive_letter: char, index: &mut MemoryIndex) -> Result<u64> {
     let volume_handle = get_volume_handle(drive_letter)?;
 
     let result = enumerate_mft_records(volume_handle, drive_letter, index);
@@ -157,11 +184,14 @@ fn enumerate_mft_records(volume_handle: HANDLE, drive_letter: char, index: &mut 
                 let is_directory = (record.file_attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 
                 if !is_directory && !filename.starts_with('$') {
-                    // For MVP, use simplified path (drive + filename)
-                    // Full path reconstruction would require traversing parent references
-                    let path = format!("{}:\\{}", drive_letter, filename);
-
-                    let file_entry = FileEntry::new(path, filename);
+                    // Use MFT references for proper indexing
+                    let file_entry = FileEntry::new(
+                        record.file_reference_number,
+                        record.parent_file_reference_number,
+                        filename,
+                        0,  // size - not available from USN records
+                        record.file_attributes,
+                    );
                     index.add_entry(file_entry);
                     count += 1;
 
@@ -261,7 +291,8 @@ fn walk_directory(path: &str, index: &mut MemoryIndex, count: &mut u64) -> Resul
             // Add file to index
             if let Some(filename) = path.file_name() {
                 let filename_str = filename.to_string_lossy().to_string();
-                let file_entry = FileEntry::new(path_str.clone(), filename_str);
+                // Use backward compatibility method for filesystem walk
+                let file_entry = FileEntry::from_path_filename(path_str.clone(), filename_str);
                 index.add_entry(file_entry);
                 *count += 1;
 
@@ -314,9 +345,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_is_root_drive_path() {
+        // Valid root drives
+        assert!(is_root_drive_path("C:\\"));
+        assert!(is_root_drive_path("D:\\"));
+        assert!(is_root_drive_path("C:"));
+        assert!(is_root_drive_path("D:"));
+
+        // Invalid - subdirectories
+        assert!(!is_root_drive_path("C:\\Windows"));
+        assert!(!is_root_drive_path("D:\\Project\\test"));
+        assert!(!is_root_drive_path("C:\\Users\\test"));
+
+        // Invalid - other formats
+        assert!(!is_root_drive_path("invalid"));
+        assert!(!is_root_drive_path("\\\\network\\share"));
+    }
+
+    #[test]
     fn test_extract_drive_letter() {
         assert_eq!(extract_drive_letter("C:\\test").unwrap(), 'C');
         assert_eq!(extract_drive_letter("D:\\folder\\file.txt").unwrap(), 'D');
+        assert_eq!(extract_drive_letter("C:\\").unwrap(), 'C');
         assert!(extract_drive_letter("invalid").is_err());
     }
 

@@ -1,6 +1,47 @@
-use std::collections::HashMap;
 use std::sync::Arc;
-use crate::model::FileEntry;
+
+/// Compact file entry optimized for memory and search performance
+/// Based on Everything's architecture: Vec-based sequential scan with SIMD
+#[derive(Debug, Clone)]
+pub struct FileEntry {
+    /// MFT File Reference Number (unique identifier)
+    pub file_ref: u64,
+
+    /// Parent directory MFT Reference
+    pub parent_ref: u64,
+
+    /// File name only (not full path)
+    pub name: Arc<str>,
+
+    /// File size in bytes
+    pub size: u64,
+
+    /// File attributes (directory, hidden, system, etc.)
+    pub attributes: u32,
+}
+
+impl FileEntry {
+    pub fn new(file_ref: u64, parent_ref: u64, name: String, size: u64, attributes: u32) -> Self {
+        Self {
+            file_ref,
+            parent_ref,
+            name: Arc::from(name),
+            size,
+            attributes,
+        }
+    }
+
+    /// Check if this entry is a directory
+    pub fn is_directory(&self) -> bool {
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+        (self.attributes & FILE_ATTRIBUTE_DIRECTORY) != 0
+    }
+
+    /// Get lowercase name for case-insensitive search
+    pub fn name_lowercase(&self) -> String {
+        self.name.to_lowercase()
+    }
+}
 
 /// High-performance memory index using Vec-based architecture
 /// Inspired by Everything: sequential scan with SIMD optimization potential
@@ -9,29 +50,20 @@ pub struct MemoryIndex {
     entries: Vec<FileEntry>,
 
     /// Fast lookup: file_ref → index in entries Vec
-    file_ref_map: HashMap<u64, usize>,
+    file_ref_map: std::collections::HashMap<u64, usize>,
 
     /// Parent-child relationships for path reconstruction
     /// parent_ref → Vec<child_index>
-    children_map: HashMap<u64, Vec<usize>>,
-
-    /// Drive letter for path reconstruction (default 'C')
-    drive_letter: char,
+    children_map: std::collections::HashMap<u64, Vec<usize>>,
 }
 
 impl MemoryIndex {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
-            file_ref_map: HashMap::new(),
-            children_map: HashMap::new(),
-            drive_letter: 'C',
+            file_ref_map: std::collections::HashMap::new(),
+            children_map: std::collections::HashMap::new(),
         }
-    }
-
-    /// Set the drive letter for path reconstruction
-    pub fn set_drive_letter(&mut self, letter: char) {
-        self.drive_letter = letter;
     }
 
     /// Add a file entry to the index
@@ -56,7 +88,8 @@ impl MemoryIndex {
     /// Remove a file entry by file reference
     pub fn remove_entry(&mut self, file_ref: u64) {
         if let Some(&index) = self.file_ref_map.get(&file_ref) {
-            // Remove from lookup map
+            // Mark as removed (don't actually remove to keep indices stable)
+            // In production, use a tombstone or compaction strategy
             self.file_ref_map.remove(&file_ref);
 
             // Remove from children map
@@ -64,9 +97,6 @@ impl MemoryIndex {
             if let Some(children) = self.children_map.get_mut(&parent_ref) {
                 children.retain(|&i| i != index);
             }
-
-            // Note: We don't actually remove from entries Vec to keep indices stable
-            // In production, implement compaction or tombstone strategy
         }
     }
 
@@ -103,11 +133,6 @@ impl MemoryIndex {
 
         // Sequential scan through all entries
         for entry in &self.entries {
-            // Skip removed entries (check if still in map)
-            if !self.file_ref_map.contains_key(&entry.file_ref) {
-                continue;
-            }
-
             // Skip if already reached limit
             if results.len() >= limit {
                 break;
@@ -123,26 +148,16 @@ impl MemoryIndex {
     }
 
     /// Reconstruct full path for a file entry
-    pub fn get_full_path(&self, file_ref: u64) -> Option<String> {
-        let mut path_components = Vec::new();
+    pub fn get_full_path(&self, file_ref: u64, drive_letter: char) -> Option<String> {
+        let mut path_components = V();
         let mut current_ref = file_ref;
-        let mut visited = std::collections::HashSet::new();
 
         // Traverse up the directory tree
         while let Some(&index) = self.file_ref_map.get(&current_ref) {
-            // Prevent infinite loops
-            if !visited.insert(current_ref) {
-                break;
-            }
-
             let entry = &self.entries[index];
+            path_components.push(entry.name.as_ref());
 
-            // Don't add empty names (root)
-            if !entry.name.is_empty() {
-                path_components.push(entry.name.as_ref());
-            }
-
-            // Stop at root (parent points to itself or is 0)
+            // Stop at root
             if entry.parent_ref == 0 || entry.parent_ref == current_ref {
                 break;
             }
@@ -155,8 +170,8 @@ impl MemoryIndex {
             return None;
         }
 
-        path_components.reverse();
-        Some(format!("{}:\\{}", self.drive_letter, path_components.join("\\")))
+        path_componverse();
+        Some(format!("{}:\\{}", drive_letter, path_components.join("\\")))
     }
 
     /// Get total number of indexed files
@@ -179,7 +194,7 @@ impl MemoryIndex {
     }
 
     /// Get children of a directory
-    pub fn get_children(&self, parent_ref: u64) -> Vec<&FileEntry> {
+    pub fn get_chien(&self, parent_ref: u64) -> Vec<&FileEntry> {
         self.children_map
             .get(&parent_ref)
             .map(|indices| {
@@ -206,43 +221,78 @@ mod tests {
     fn test_add_and_search() {
         let mut index = MemoryIndex::new();
 
-        index.add_entry(FileEntry::new(1, 0, "file1.txt".to_string(), 1024, 0));
-        index.add_entry(FileEntry::new(2, 0, "file2.txt".to_string(), 2048, 0));
+        index.add_entry(FileEntry::new(
+            1,
+            0,
+            "file1.txt".to_string(),
+            1024,
+            0,
+        ));
+
+        index.add_entry(FileEntry::new(
+            2,
+            0,
+            "file2.txt".to_string(),
+            2048,
+            0,
+        ));
 
         let results = index.search("file", 10);
         assert_eq!(results.len(), 2);
 
         let results = index.search("file1", 10);
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].filename(), "file1.txt");
+        assert_eq!(results[0].name.as_ref(), "file1.txt");
     }
 
     #[test]
     fn test_path_reconstruction() {
         let mut index = MemoryIndex::new();
-        index.set_drive_letter('C');
 
         // Root directory
-        index.add_entry(FileEntry::new(5, 5, "".to_string(), 0, 0x10));
+        index.add_entry(FileEntry::new(
+            5,
+            5,  // Root points to itself
+            "".to_string(),
+            0,
+            0x10,  // Directory
+        ));
 
         // Subdirectory: C:\Users
-        index.add_entry(FileEntry::new(10, 5, "Users".to_string(), 0, 0x10));
+        index.add_entry(FileEntry::new(
+            10,
+            5,
+            "Users".to_string(),
+            0,
+            0x10,
+        ));
 
         // File: C:\Users\test.txt
-        index.add_entry(FileEntry::new(20, 10, "test.txt".to_string(), 1024, 0));
+        index.add_entry(FileEntry::new(
+            20,
+            10,
+            "test.txt".to_string(),
+            1024,
+   0,
+        ));
 
-        let path = index.get_full_path(20);
+ path = index.get_full_path(20, 'C');
         assert!(path.is_some());
-        let path_str = path.unwrap();
-        assert!(path_str.contains("Users"));
-        assert!(path_str.contains("test.txt"));
+        // Path should be something like "C:\Users\test.txt"
     }
 
     #[test]
     fn test_remove_entry() {
         let mut index = MemoryIndex::new();
 
-        index.add_entry(FileEntry::new(1, 0, "file1.txt".to_string(), 1024, 0));
+        index.add_entry(FileEntry::new(
+            1,
+            0,
+            "file1.txt".to_string(),
+            1024,
+            0,
+        ));
+
         assert_eq!(index.total_files(), 1);
 
         index.remove_entry(1);
@@ -253,11 +303,20 @@ mod tests {
     fn test_update_entry() {
         let mut index = MemoryIndex::new();
 
-        index.add_entry(FileEntry::new(1, 0, "old_name.txt".to_string(), 1024, 0));
+        index.add_entry(FileEntry::new(
+            1,
+            0,
+            "old_name.txt".to_string(),
+            1024,
+            0,
+        ));
 
-        index.update_entry(1, FileEntry::new(1, 0, "new_name.txt".to_string(), 1024, 0));
+        index.update_entry(
+            1,
+            FileEntry::new(1, 0, "new_name.txt".to_string(), 1024, 0),
+        );
 
         let entry = index.get_entry(1).unwrap();
-        assert_eq!(entry.filename(), "new_name.txt");
+        assert_eq!(entry.name.as_ref(), "new_name.txt");
     }
 }

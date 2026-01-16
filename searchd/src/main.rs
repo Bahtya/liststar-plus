@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use index::MemoryIndex;
-use ipc::{NamedPipeServer, RequestHandler};
+use ipc::{NamedPipeServer, RequestHandler, UsnControlHandle};
 use ipc::protocol::*;
 
 #[tokio::main]
@@ -21,8 +21,20 @@ async fn main() -> Result<()> {
     // Create shared memory index
     let index = Arc::new(RwLock::new(MemoryIndex::new()));
 
+    // Create USN monitoring control handle
+    let usn_handle: UsnControlHandle = Arc::new(RwLock::new(None));
+
     // Create request handler
-    let handler = Arc::new(RequestHandler::new(index.clone()));
+    let handler = Arc::new(RequestHandler::new(index.clone(), usn_handle.clone()));
+
+    // Start USN monitoring task (optional, can be enabled after initial indexing)
+    // Uncomment to enable real-time file monitoring:
+    // let index_clone = index.clone();
+    // tokio::spawn(async move {
+    //     if let Err(e) = start_usn_monitoring(index_clone, 'C').await {
+    //         log::error!("USN monitoring failed: {}", e);
+    //     }
+    // });
 
     // Create Named Pipe server
     let server = NamedPipeServer::new()?;
@@ -154,6 +166,20 @@ async fn handle_client(server: &NamedPipeServer, handler: Arc<RequestHandler>) -
                 let resp = handler.handle_search(req).await?;
                 send_response(server, &resp)?;
             }
+            3 => {
+                // StartUsnMonitoring
+                log::debug!("Received StartUsnMonitoring request");
+                let req: StartUsnMonitoringReq = prost::Message::decode(&msg_buf[..])?;
+                let resp = handler.handle_start_usn_monitoring(req).await?;
+                send_response(server, &resp)?;
+            }
+            4 => {
+                // StopUsnMonitoring
+                log::debug!("Received StopUsnMonitoring request");
+                let req: StopUsnMonitoringReq = prost::Message::decode(&msg_buf[..])?;
+                let resp = handler.handle_stop_usn_monitoring(req).await?;
+                send_response(server, &resp)?;
+            }
             _ => {
                 log::warn!("Unknown message type: {}", msg_type);
                 break;
@@ -168,5 +194,28 @@ async fn handle_client(server: &NamedPipeServer, handler: Arc<RequestHandler>) -
 fn send_response<M: prost::Message>(server: &NamedPipeServer, msg: &M) -> Result<()> {
     let encoded = ipc::protocol::encode_message(msg)?;
     server.write(&encoded)?;
+    Ok(())
+}
+
+/// Start USN journal monitoring for a drive
+/// This function runs in a background task and monitors file system changes
+#[allow(dead_code)]
+async fn start_usn_monitoring(index: Arc<RwLock<MemoryIndex>>, drive_letter: char) -> Result<()> {
+    use std::sync::atomic::AtomicBool;
+
+    log::info!("Starting USN monitoring for drive {}:", drive_letter);
+
+    // Get volume handle
+    let volume_handle = index::get_volume_handle(drive_letter)?;
+
+    // Create stop flag (this version doesn't support stopping)
+    let stop_flag = Arc::new(AtomicBool::new(false));
+
+    // Create USN monitor
+    let mut monitor = index::UsnMonitor::new(volume_handle, index, stop_flag)?;
+
+    // Start monitoring loop
+    monitor.start_monitoring().await?;
+
     Ok(())
 }

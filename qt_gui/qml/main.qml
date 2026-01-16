@@ -96,7 +96,8 @@ ApplicationWindow {
                     color: index % 2 === 0 ? "#ffffff" : "#f9f9f9"
 
                     MouseArea {
-                        anchors.fill:                      hoverEnabled: true
+                        anchors.fill: parent
+                        hoverEnabled: true
 
                         onEntered: parent.color = "#e3f2fd"
                         onExited: parent.color = index % 2 === 0 ? "#ffffff" : "#f9f9f9"
@@ -111,7 +112,7 @@ ApplicationWindow {
 
                         Text {
                             width: parent.width * 0.3
-                   ght: parent.height
+                            height: parent.height
                             text: model.filename
                             font.pixelSize: 12
                             verticalAlignment: Text.AlignVCenter
@@ -168,7 +169,7 @@ ApplicationWindow {
                 Rectangle {
                     width: 1
                     height: parent.height * 0.6
-                 erticalCenter: parent.verticalCenter
+                    anchors.verticalCenter: parent.verticalCenter
                     color: "#cccccc"
                 }
 

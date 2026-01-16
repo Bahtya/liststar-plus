@@ -1,4 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
+
+# Set vcpkg toolchain if not already set
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE "D:/Project/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        CACHE STRING "Vcpkg toolchain file")
+endif()
+
 project(listory_search VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -7,6 +14,8 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Concurrent)
+
+# Find Protobuf (vcpkg will provide it automatically if CMAKE_TOOLCHAIN_FILE is set)
 find_package(Protobuf REQUIRED)
 
 # Generate protobuf files

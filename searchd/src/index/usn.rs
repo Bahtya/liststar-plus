@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::mem;
 use std::ptr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{
@@ -67,11 +68,17 @@ pub struct UsnMonitor {
     journal_id: u64,
     next_usn: i64,
     index: Arc<RwLock<MemoryIndex>>,
+    stop_flag: Arc<AtomicBool>,
 }
+
+// SAFETY: UsnMonitor is only used within a single thread.
+// The HANDLE is not shared across threads, and all operations on it
+// happen within the thread that owns the UsnMonitor instance.
+unsafe impl Send for UsnMonitor {}
 
 impl UsnMonitor {
     /// Create a new USN monitor for a volume
-    pub fn new(volume_handle: HANDLE, index: Arc<RwLock<MemoryIndex>>) -> Result<Self> {
+    pub fn new(volume_handle: HANDLE, index: Arc<RwLock<MemoryIndex>>, stop_flag: Arc<AtomicBool>) -> Result<Self> {
         let journal_data = query_usn_journal(volume_handle)?;
 
         Ok(Self {
@@ -79,6 +86,7 @@ impl UsnMonitor {
             journal_id: journal_data.usn_journal_id,
             next_usn: journal_data.next_usn,
             index,
+            stop_flag,
         })
     }
 
@@ -87,6 +95,12 @@ impl UsnMonitor {
         log::info!("Starting USN journal monitoring...");
 
         loop {
+            // Check stop flag
+            if self.stop_flag.load(Ordering::Relaxed) {
+                log::info!("USN monitoring stopped by request");
+                break;
+            }
+
             match self.read_usn_changes().await {
                 Ok(()) => {}
                 Err(e) => {
@@ -98,6 +112,8 @@ impl UsnMonitor {
             // Sleep briefly to avoid busy-waiting
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
+
+        Ok(())
     }
 
     /// Read and process USN changes
@@ -184,17 +200,46 @@ impl UsnMonitor {
 
         let filename = String::from_utf16_lossy(&filename_u16);
 
+        // Skip directories and system files
+        let is_directory = (record.file_attributes & 0x10) != 0;
+        if is_directory || filename.starts_with('$') {
+            return Ok(());
+        }
+
+        let mut index = self.index.write().await;
+
         // Handle different USN reasons
         if record.reason & USN_REASON_FILE_CREATE != 0 {
-            log::debug!("File created: {}", filename);
-            // Note: We don't have the full path here, so we skip adding to index
-      // A full implementation would need to resolve the file reference number to a path
+            log::debug!("File created: {} (ref: {})", filename, record.file_reference_number);
+
+            // Add new file to index
+            let entry = FileEntry::new(
+                record.file_reference_number,
+                record.parent_file_reference_number,
+                filename.clone(),
+                0, // size not available from USN record
+                record.file_attributes,
+            );
+            index.add_entry(entry);
+
         } else if record.reason & USN_REASON_FILE_DELETE != 0 {
-            log::debug!("File deleted: {}", filename);
-            // Remove from index (if we had the full path)
+            log::debug!("File deleted: {} (ref: {})", filename, record.file_reference_number);
+
+            // Remove from index using file_ref
+            index.remove_entry(record.file_reference_number);
+
         } else if record.reason & USN_REASON_RENAME_NEW_NAME != 0 {
-            log::debug!("File renamed: {}", filename);
-            // Update index (if we had the full path)
+            log::debug!("File renamed: {} (ref: {})", filename, record.file_reference_number);
+
+            // Update entry with new name
+            let entry = FileEntry::new(
+                record.file_reference_number,
+                record.parent_file_reference_number,
+                filename.clone(),
+                0, // size not available from USN record
+                record.file_attributes,
+            );
+            index.update_entry(record.file_reference_number, entry);
         }
 
         Ok(())
