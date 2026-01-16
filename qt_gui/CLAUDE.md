@@ -1,84 +1,84 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 Claude Code (claude.ai/code) 在此代码库中工作时提供指导。
 
-## Project Overview
+## 项目概述
 
-This is the Qt 6 GUI frontend for Listory Search, a Windows file search application. The GUI is a **client-only** application that communicates with a Rust-based search engine (`searchd.exe`) via Named Pipes using Protobuf messages.
+这是 Listory Search 的 Qt 6 GUI 前端，一个 Windows 文件搜索应用程序。该 GUI 是一个**纯客户端**应用程序，通过 Named Pipes 使用 Protobuf 消息与基于 Rust 的搜索引擎（`searchd.exe`）通信。
 
-**Critical Constraint**: This codebase is UI-only. Do NOT implement any indexing, NTFS/MFT/USN parsing, or search logic here. All business logic resides in the Rust backend (`../searchd`).
+**关键约束**：此代码库仅负责 UI。不要在这里实现任何索引、NTFS/MFT/USN 解析或搜索逻辑。所有业务逻辑都在 Rust 后端（`../searchd`）中。
 
-## Build Commands
+## 构建命令
 
-### Prerequisites
-- **Qt 6.10.1 MSVC 2022 64-bit** (required - MinGW is not compatible with vcpkg's MSVC libraries)
-- **CMake 3.16+** (included with Qt: `C:\Qt\Tools\CMake_64\bin\cmake.exe`)
-- **Visual Studio 2022** with C++ desktop development workload
-- **vcpkg** with protobuf and abseil installed for x64-windows triplet
-- Protobuf is automatically found via vcpkg toolchain
+### 前置要求
+- **Qt 6.10.1 MSVC 2022 64-bit**（必需 - MinGW 与 vcpkg 的 MSVC 库不兼容）
+- **CMake 3.16+**（Qt 自带：`C:\Qt\Tools\CMake_64\bin\cmake.exe`）
+- **Visual Studio 2022** 带 C++ 桌面开发工作负载
+- **vcpkg** 已为 x64-windows triplet 安装 protobuf 和 abseil
+- Protobuf 通过 vcpkg 工具链自动查找
 
-### Quick Build (Recommended)
+### 快速构建（推荐）
 
-Use the provided build script:
+使用提供的构建脚本：
 ```bash
-# From qt_gui directory
+# 在 qt_gui 目录下
 build-msvc.bat
 ```
 
-This script will:
-1. Configure CMake with MSVC toolchain
-2. Build Release version
-3. Deploy Qt dependencies with windeployqt
+此脚本将：
+1. 使用 MSVC 工具链配置 CMake
+2. 构建 Release 版本
+3. 使用 windeployqt 部署 Qt 依赖
 
-### Manual Build with CMake
+### 使用 CMake 手动构建
 
 ```bash
-# From qt_gui directory
+# 在 qt_gui 目录下
 mkdir build-msvc
 cd build-msvc
 
-# Configure
+# 配置
 C:\Qt\Tools\CMake_64\bin\cmake.exe .. ^
   -DCMAKE_PREFIX_PATH=C:/Qt/6.10.1/msvc2022_64 ^
   -DCMAKE_TOOLCHAIN_FILE=D:/Project/vcpkg/scripts/buildsystems/vcpkg.cmake ^
   -G "Visual Studio 17 2022" ^
   -A x64
 
-# Build
+# 构建
 C:\Qt\Tools\CMake_64\bin\cmake.exe --build . --config Release
 
-# Deploy Qt dependencies
+# 部署 Qt 依赖
 cd Release
 C:\Qt\6.10.1\msvc2022_64\bin\windeployqt.exe listory_search.exe --release
 ```
 
-### Build with Qt Creator
+### 使用 Qt Creator 构建
 
-1. Open `CMakeLists.txt` in Qt Creator
-2. Select **Desktop Qt 6.10.1 MSVC2022 64bit** Kit (NOT MinGW)
-3. In Project Settings → Build → CMake, add:
-   - Key: `CMAKE_TOOLCHAIN_FILE`
-   - Value: `D:/Project/vcpkg/scripts/buildsystems/vcpkg.cmake`
-4. Run CMake and build
+1. 在 Qt Creator 中打开 `CMakeLists.txt`
+2. 选择 **Desktop Qt 6.10.1 MSVC2022 64bit** Kit（不要选 MinGW）
+3. 在项目设置 → 构建 → CMake 中添加：
+   - 键：`CMAKE_TOOLCHAIN_FILE`
+   - 值：`D:/Project/vcpkg/scripts/buildsystems/vcpkg.cmake`
+4. 运行 CMake 并构建
 
-### Run the Application
+### 运行应用程序
 
 ```bash
-# From qt_gui directory
+# 在 qt_gui 目录下
 run.bat
 
-# Or manually
+# 或手动运行
 cd build-msvc\Release
 listory_search.exe
 ```
 
-## Architecture
+## 架构
 
-### High-Level Design
+### 高层设计
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Qt GUI (this repo)                       │
+│                    Qt GUI (本仓库)                          │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
 │  │  QML UI      │───▶│SearchBackend │───▶│ PipeClient   │ │
 │  │  (main.qml)  │    │(QAbstractList│    │ (Win32 API)  │ │
@@ -89,159 +89,157 @@ listory_search.exe
                                     Named Pipe: \\.\pipe\listory_search
                                                    │
 ┌──────────────────────────────────────────────────┼──────────┐
-│                 Rust Backend (searchd.exe)       │          │
+│                 Rust 后端 (searchd.exe)          │          │
 │                                                  ▼          │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  IPC Handler (Named Pipe Server)                     │  │
+│  │  IPC 处理器 (Named Pipe 服务器)                      │  │
 │  └──────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Search Engine (MFT/USN indexing, search logic)      │  │
+│  │  搜索引擎 (MFT/USN 索引、搜索逻辑)                   │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Component Responsibilities
+### 组件职责
 
 **QML UI (`qml/main.qml`)**
-- Single-window interface with search input, results ListView, and status bar
-- Delegates all logic to SearchBackend
-- Uses Qt Quick Controls for minimal, tool-like UI (similar to Everything/Spotlight)
+- 单窗口界面，包含搜索输入框、结果 ListView 和状态栏
+- 将所有逻辑委托给 SearchBackend
+- 使用 Qt Quick Controls 实现简洁的工具型 UI（类似 Everything/Spotlight）
 
 **SearchBackend (`src/search_backend.{h,cpp}`)**
-- QAbstractListModel exposing search results to QML
-- Manages PipeClient lifecycle
-- Runs IPC operations in background threads via QtConcurrent to prevent UI blocking
-- Marshals Protobuf messages to/from the Rust backend
-- Handles file opening via ShellExecuteW
+- QAbstractListModel，向 QML 暴露搜索结果
+- 管理 PipeClient 生命周期
+- 通过 QtConcurrent 在后台线程运行 IPC 操作以防止 UI 阻塞
+- 与 Rust 后端之间编组 Protobuf 消息
+- 通过 ShellExecuteW 处理文件打开
 
 **PipeClient (`src/ipc/pipe_client.{h,cpp}`)**
-- Windows Named Pipe client using Win32 API (CreateFileW, ReadFile, WriteFile)
-- Auto-starts `searchd.exe` if pipe connection fails
-- Synchronous request/response pattern (no streaming)
-- Pipe name: `\\.\pipe\listory_search`
+- 使用 Win32 API 的 Windows Named Pipe 客户端（CreateFileW、ReadFile、WriteFile）
+- 如果管道连接失败，自动启动 `searchd.exe`
+- 同步请求/响应模式（无流式传输）
+- 管道名称：`\\.\pipe\listory_search`
 
 **IPC Codec (`src/ipc/ipc_codec.h`)**
-- Header-only utility for encoding/decoding messages
-- Wire format: `[4 bytes length (little-endian uint32)][protobuf payload]`
-- No type byte prefix (unlike some IPC protocols)
+- 仅头文件的消息编码/解码工具
+- 传输格式：`[4 字节长度 (小端 uint32)][protobuf 载荷]`
+- 无类型字节前缀（与某些 IPC 协议不同）
 
-### IPC Protocol
+### IPC 协议
 
-Defined in `proto/search.proto`:
+在 `proto/search.proto` 中定义：
 
-**Messages:**
-- `PingReq/PingResp` - Health check, returns backend version
-- `BuildIndexReq/BuildIndexResp` - indexing (not currently used by UI)
-- `SearchReq/SearchResp` - File search with keyword and limit
-- `SearchResult` - Contains `filename` and `path` fields
+**消息：**
+- `PingReq/PingResp` - 健康检查，返回后端版本
+- `BuildIndexReq/BuildIndexResp` - 索引构建（UI 当前未使用）
+- `SearchReq/SearchResp` - 文件搜索，带关键词和限制
+- `SearchResult` - 包含 `filename` 和 `path` 字段
 
-**Wire Format:**
+**传输格式：**
 ```
-[4 bytes: payload length (uint32 LE)] [N bytes: protobuf binary]
+[4 字节：载荷长度 (uint32 小端)] [N 字节：protobuf 二进制]
 ```
 
-The Qt client sends requests and blocks waiting for responses. All IPC calls happen in background threads to keep the UI responsive.
+Qt 客户端发送请求并阻塞等待响应。所有 IP台线程中进行，以保持 UI 响应。
 
-### Threading Model
+### 线程模型
 
-- **UI Thread**: QML rendering, user input, model updates
-- **Background Threads** (QtConcurrent::run): All PipeClient operations
-  - `performPing()` - Engine health check
-  - `performSearch()` - Search requests
-- Results are marshaled back to UI thread via `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`
+- **UI 线程**：QML 渲染、用户输入、模型更新
+- **后台线程**（QtConcurrent::run）：所有 PipeClient 操作
+  - `performPing()` - 引擎健康检查
+  - `performSearch()` - 搜索请求
+- 结果通过 `QMetaObject::invokeMethod(..., Qt::QueuedConnection)` 编组回 UI 线程
 
-**Important**: Never call PipeClient methods directly from the UI thread.
+**重要**：永远不要从 UI 线程直接调用 PipeClient 方法。
 
-### Startup Flow
+### 启动流程
 
-1. Qt app launches, loads QML
-2. SearchBackend constructor creates PipeClient
-3. `connectToEngine()` called from main.cpp
-4. Background thread attempts pipe connection
-5. If connection fails, PipeClient starts `searchd.exe` via CreateProcessW
-6. Retries connection up to 3 times with 500ms delays
-7. Sends PingReq to verify connection and get version
-8. Updates UI status bar with connection stn### Search Flow
+1. Qt 应用启动，加载 QML
+2. SearchBackend 构造函数创建 PipeClient
+3. 从 main.cpp 调用 `connectToEngine()`
+4. 后台线程尝试管道连接
+5. 如果连接失败，PipeClient 通过 CreateProcessW 启动 `searchd.exe`
+6. 重试连接最多 3 次，每次延迟 500ms
+7. 发送 PingReq 验证连接并获取版本
+8. 更新 UI 状态栏显示连接状态
 
-1. User types in search box and presses Enter or clicks "查找"
-2. QML calls `searchBackend.search(keyword)`
-3. SearchBackend spawns background thread
-4. Thread creates SearchReq protobuf, serializes it
-5. PipeClient sends via Named Pipe with length prefix
-6. Waits for response (blocking in background thread)
-7. Deserializes SearchResp protobuf
-8. Marshals results to UI thread
-9. Updates QAbstractListModel, triggering QML ListView refresh
+### 搜索流程
 
-## Key Constraints and Design Decisions
+1. 用户在搜索框输入并按 Enter 或点击"查找"
+2. QML 调用 `searchBackend.search(keyword)`
+3. SearchBa后台线程
+4. 线程创建 SearchReq protobuf，序列化
+5. PipeClient 通过 Named Pipe 发送（带长度前缀）
+6. 等待响应（在后台线程中阻塞）
+7. 反序列化 SearchResp protobuf
+8. 将结果编组到 UI 线程
+9. 更新 QAbstractListModel，触发 QML ListView 刷新
 
-### What This Codebase Does NOT Do
-- ❌ File indexing (MFT/USN parsing)
-- ❌ Search algorithms or ranking
-- ❌ File system monitoring
-- ❌ Protocol design changes (proto file is shared with Rust backend)
-- ❌ Multi-window UI, settings pages, themes, animations, i18n
+## 关键约束和设计决策
 
-### What This Codebase DOES Do
-- ✅ Minimal search UI (input box, results list, status bar)
-- ✅ Named Pipe client communication
-- ✅ Protobuf message serialization
-- ✅ Background threading for IPC
-- ✅ Auto-starting the Rust backend
-- ✅ Opening files via ShellExecuteW
+### 此代码库不做的事情
+- ❌ 文件索引（MFT/USN 解析）
+- ❌ 搜索算法或排名
+- ❌ 文件系统监控
+- ❌ 协议设计更改（proto 文件与 Rust 后端共享）
+- ❌ 多窗口 UI、设置页面、主题、动画、国际化
 
-### Protobuf Configuration
+### 此代码库做的事情
+- ✅ 最小化搜索 UI（输入框、结果列表、状态栏）
+- ✅ Named Pipe 客户端通信
+- ✅ Protobuf 消息序列化
+- ✅ IPC 的后台线程处理
+- ✅ 自动启动 Rust 后端
+- ✅ 通过 ShellExecuteW 打开文件
 
-The CMakeLists.txt hardcodes the protoc path (line 12):
-```cmake
-set(Protobuf_PROTOC_EXECUTABLE "C/protoc-33.4-win64/bin/protoc
+### Protobuf 配置
 
-Adjust this path for your environment or use vcpkg's protoc.
+CMakeLists.txt 通过 vcpkg 自动查找 protobuf。
 
-Generated files (`search.pb.h`, `search.pb.cc`) are created in the build directory and automatically linked.
+生成的文件（`search.pb.h`、`search.pb.cc`）在构建目录中创建并自动链接。
 
-## Common Issues
+## 常见问题
 
-### "Could not find Qt6"
-Set CMAKE_PREFIX_PATH to your Qt installation:
+### "找不到 Qt6"
+设置 CMAKE_PREFIX_PATH 到你的 Qt 安装目录：
 ```bash
-cmake .. -DCMAKE_PREFIX_PATH="C:/Qt/6.5.0/msvc2019_64"
+cmake .. -DCMAKE_PREFIX_PATH="C:/Qt/6.10.1/msvc2022_64"
 ```
 
-### "Could not find Protobuf"
-Use vcpkg toolchain file:
+### "找不到 Protobuf"
+使用 vcpkg 工具链文件：
 ```bash
-cmake .. -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+cmake .. -DCMAKE_TOOLCHAIN_FILE="D:/Project/vcpkg/scripts/buildsystems/vcpkg.cmake"
 ```
 
-### "Engine: Disconnected" in UI
-- Ensure `searchd.exe` is in the same directory as `listory_search.exe`
-- Check that the pipe name matches: `\\.\pipe\listory_search`
-- Verify the Rust backend is running and listening on the correct pipe
+### UI 中显示 "Engine: Disconnected"
+- 确保 `searchd.exe` 与 `listory_search.exe` 在同一目录
+- 检查管道名称是否匹配：`\\.\pipe\listory_search`
+- 验证 Rust 后端正在运行并监听正确的管道
 
-### Runtime DLL errors
-Run windeployqt to copy Qt dependencies:
+### 运行时 DLL 错误
+运行 windeployqt 复制 Qt 依赖：
 ```bash
-C:\Qt\6.5.0\msvc2019_64\bin\windeployqt.exe listory_search.exe
+C:\Qt\6.10.1\msvc2022_64\bin\windeployqt.exe listory_search.exe
 ```
 
-## Modifying the UI
+## 修改 UI
 
-The QML file (`qml/main.qml`) defines the entire UI. Key elements:
-- **Line 22-40**: Search input TextField and Button
-- **Line 49-144**: Results ListView with custom delegate
-- **Line 147-182**: Status bar showing engine status and file count
+QML 文件（`qml/main.qml`）定义了整个 UI。关键元素：
+- **第 22-40 行**：搜索输入 TextField 和 Button
+- **第 49-144 行**：结果 ListView 和自定义委托
+- **第 147-182 行**：状态栏显示引擎状态和文件计数
 
-The UI follows a strict vertical layout with no tabs, dialogs, or secondary windows.
+UI 遵循严格的垂直布局，没有选项卡、对话框或辅助窗口。
 
-## Modifying IPC
+## 修改 IPC
 
-If you need to change the protocol:
-1. **DO NOT** modify `proto/search.proto` without coordinating with the Rust backend
-2. The proto file is shared between Qt and Rust codebases
-3. Both sides must be rebuilt after proto changes
-4. The wire format (length prefix) is fixed and must not change
+如果需要更改协议：
+1. **不要**在未与 Rust 后端协调的情况下修改 `proto/search.proto`
+2. proto 文件在 Qt 和 Rust 代码库之间共享
+3. proto 更改后必须重新构建两端
+4. 传输格式（长度前缀）是固定的，不能更改
 
-## File Opening
+## 文件打开
 
-Double-clicking a result calls `SearchBackend::openFile()` which uses Windows ShellExecuteW to open the file with its default application. This is intentionally simple - no custom file viewers or editors.
+双击结果调用 `SearchBackend::openFile()`，它使用 Windows ShellExecuteW 用默认应用程序打开文件。这是有意保持简单的 - 没有自定义文件查看器或编辑器。
