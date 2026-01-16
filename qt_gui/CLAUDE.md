@@ -11,42 +11,65 @@ This is the Qt 6 GUI frontend for Listory Search, a Windows file search applicat
 ## Build Commands
 
 ### Prerequisites
-- Qt 6.x (6.5 or higher recommended) with Qt Quick and Qt Concurrent
-- CMake 3.16+
-- Protobuf compiler (`protoc.exe`) - path configured in CMakeLists.txt line 12
-- Visual Studio 2019/2022 or MinGW
-- vcpkg (recommended for Protobuf) or manual Protobuf installation
+- **Qt 6.10.1 MSVC 2022 64-bit** (required - MinGW is not compatible with vcpkg's MSVC libraries)
+- **CMake 3.16+** (included with Qt: `C:\Qt\Tools\CMake_64\bin\cmake.exe`)
+- **Visual Studio 2022** with C++ desktop development workload
+- **vcpkg** with protobuf and abseil installed for x64-windows triplet
+- Protobuf is automatically found via vcpkg toolchain
 
-### Build with CMake (Command Line)
+### Quick Build (Recommended)
+
+Use the provided build script:
+```bash
+# From qt_gui directory
+build-msvc.bat
+```
+
+This script will:
+1. Configure CMake with MSVC toolchain
+2. Build Release version
+3. Deploy Qt dependencies with windeployqt
+
+### Manual Build with CMake
 
 ```bash
 # From qt_gui directory
-mkdir build
-cd build
+mkdir build-msvc
+cd build-msvc
 
-# Configure (adjust paths to your Qt installation)
-cmake .. -DCMAKE_PREFIX_PATH="C:/Qt/6.5.0/msvc2019_64" -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -G "Visual Studio 17 2022" -A x64
+# Configure
+C:\Qt\Tools\CMake_64\bin\cmake.exe .. ^
+  -DCMAKE_PREFIX_PATH=C:/Qt/6.10.1/msvc2022_64 ^
+  -DCMAKE_TOOLCHAIN_FILE=D:/Project/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+  -G "Visual Studio 17 2022" ^
+  -A x64
 
 # Build
-cmake --build . --config Release
+C:\Qt\Tools\CMake_64\bin\cmake.exe --build . --config Release
 
-# Run
-Release\listory_search.exe
+# Deploy Qt dependencies
+cd Release
+C:\Qt\6.10.1\msvc2022_64\bin\windeployqt.exe listory_search.exe --release
 ```
 
-### Build with Qt Creator (Recommended)
+### Build with Qt Creator
+
 1. Open `CMakeLists.txt` in Qt Creator
-2. Configure with Qt 6 Kit
-3. Build and run directly from IDE
+2. Select **Desktop Qt 6.10.1 MSVC2022 64bit** Kit (NOT MinGW)
+3. In Project Settings → Build → CMake, add:
+   - Key: `CMAKE_TOOLCHAIN_FILE`
+   - Value: `D:/Project/vcpkg/scripts/buildsystems/vcpkg.cmake`
+4. Run CMake and build
 
-### Deploy
+### Run the Application
+
 ```bash
-# After building Release version
-cd build/Release
-C:\Qt\6.5.0\msvc2019_64\bin\windeployqt.exe listory_search.exe
+# From qt_gui directory
+run.bat
 
-# Copy the Rust search engine
-copy ..\..\searchd\target\release\searchd.exe .
+# Or manually
+cd build-msvc\Release
+listory_search.exe
 ```
 
 ## Architecture
