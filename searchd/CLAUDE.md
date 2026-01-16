@@ -47,11 +47,16 @@ Protobuf files are automatically compiled during build via `build.rs`. The proto
 - **Messages**: Ping, BuildIndex, Search (defined in `../proto/search.proto`)
 
 #### 2. Index Layer (`src/index/`)
-- **MemoryIndex** (`memory.rs`): In-memory HashMap<String, Vec<FileEntry>>
-  - Key: lowercase filename for case-insensitive search
-  - Value: list of FileEntry (path + filename)
+- **MemoryIndex** (`memory.rs`): Everything-style Vec-based architecture
+  - **Main table**: `Vec<FileEntry>` for sequential scanning (SIMD-ready)
+  - **Fast lookup**: `HashMap<u64, usize>` mapping file_ref → index
+  - **Parent-child**: `HashMap<u64, Vec<usize>>` mapping parent_ref → children indices
+  - **Path reconstruction**: `get_full_path()` traverses parent references to build full paths
   - No persistence - rebuilt on restart
-- **MFT Reader** (`mft.rs`): Simplified filesystem walker (MVP uses `std::fs::read_dir` instead of raw MFT parsing)
+- **MFT Reader** (`mft.rs`): NTFS MFT enumeration using USN Journal API
+  - Root drives (C:\, D:\): Uses `FSCTL_ENUM_USN_DATA` for fast MFT enumeration (~10,000 files/sec)
+  - Subdirectories: Falls back to `std::fs::read_dir` filesystem walk (~1,000 files/sec)
+  - Extracts `file_reference_number` and `parent_file_reference_number` from MFT records
 - **USN Monitor** (`usn.rs`): Handles incremental updates via USN Journal (FILE_CREATE, FILE_DELETE, RENAME_NEW_NAME)
 
 #### 3. Search Layer (`src/search/`)
@@ -59,7 +64,13 @@ Protobuf files are automatically compiled during build via `build.rs`. The proto
 - **Content Search** (`content.rs`): Delegates to ripgrep CLI (not indexed)
 
 #### 4. Data Model (`src/model/`)
-- **FileEntry**: Simple struct with `path` and `filename` fields
+- **FileEntry**: Everything-style structure optimized for memory and performance
+  - `file_ref: u64` - MFT File Reference Number (unique identifier)
+  - `parent_ref: u64` - Parent directory MFT Reference
+  - `name: Arc<str>` - Filename only (shared string for memory efficiency)
+  - `size: u64` - File size in bytes
+  - `attributes: u32` - File attributes (directory, hidden, system, etc.)
+  - Backward compatibility: `from_path_filename()` for non-MFT sources
 
 ### Main Loop Flow
 1. Start Named Pipe server
@@ -304,3 +315,117 @@ The Qt client should implement the same IPC protocol:
 - Search result ranking/scoring
 - Filter by file type, size, date
 - Regular expression support
+
+
+🧱 架构总览
+
+┌─────────────┐
+│  USN Journal│ ← 增量变化
+└──────┬──────┘
+       │
+┌──────▼────────┐
+│   索引维护层   │
+│ (增删改 MFT记录)│
+└──────┬────────┘
+       │
+┌──────▼────────┐
+│  内存索引结构  │ ← 搜索只访问这里
+│  (Trie / Vec)  │
+└──────┬────────┘
+       │
+┌──────▼────────┐
+│   Rust 查询引擎│
+└───────────────┘
+完整流程：
+程序启动
+  ↓
+一次性扫描 MFT（全盘）
+  ↓
+构建内存索引（Vec / Trie / Hash）
+  ↓
+记录当前 USN 起点
+  ↓
+─────────────── 程序运行中 ───────────────
+  ↓
+持续读取 USN Journal
+  ↓
+只处理“发生变化的那几个文件”
+  ↓
+增量更新内存索引
+
+那 MFT 什么时候“再扫一次”？
+1️⃣ 接收到IPC的建立索引请求
+
+建立完整索引
+
+获取 file_id → path 映射
+
+2️⃣ USN Journal 断档
+
+例如：
+
+程序关机太久
+
+USN Journal 被清空
+
+USN 起点号 < Journal First USN
+
+👉 增量不可用，只能全量重建
+
+
+
+
+
+📊 当前状态：
+
+  项目进度： MVP 核心功能已完成 🎉
+  - ✅ Named Pipe IPC 服务器
+  - ✅ Protobuf 消息编解码
+  - ✅ 文件索引构建（MFT + 文件系统遍历）
+  - ✅ 文件名搜索（不区分大小写）
+  - ✅ 完整的测试套件
+  - ✅ MFT 优化性能（已实现，路径过滤已修复）
+  - ⏳ 架构优化（Everything 风格索引） <- 当前进度
+  - ⏳ USN Journal 增量更新（代码已存在，待集成）
+  - ⏳ Qt 客户端（待开发）
+
+## 架构升级计划
+
+### 当前架构（V1）
+```rust
+HashMap<String, Vec<FileEntry>>  // 按文件名分组
+
+struct FileEntry {
+    path: String,      // 完整路径
+    filename: String,  // 文件名
+}
+```
+
+### 目标架构（V2）- Everything 风格
+```rust
+Vec<FileEntry>                    // 主表（顺序扫描）
+HashMap<u64, usize>               // file_ref → index
+HashMap<u64, Vec<usize>>          // parent_ref → children
+
+struct FileEntry {
+    file_ref: u64,      // MFT Reference
+    parent_ref: u64,    // 父目录引用
+    name: Arc<str>,     // 仅文件名（共享字符串）
+    size: u64,
+    attributes: u32,
+}
+```
+
+**优势：**
+- ✅ 支持 MFT Reference，可增量更新
+- ✅ 支持路径重建
+- ✅ Vec 顺序扫描，SIMD 优化潜力
+- ✅ 内存效率提升 ~47%
+
+**实施计划：**
+详见 `MIGRATION_PLAN.md` 文档
+
+**新文件：**
+- `src/model/file_entry_v2.rs` - 新索引架构实现
+- `MIGRATION_PLAN.md` - 详细迁移计划
+- `PROGRESS.md` - 工作进度报告

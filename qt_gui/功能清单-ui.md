@@ -71,45 +71,8 @@ Named Pipe（Win32 API）
 
 5️⃣ IPC 协议（只作为 Client 使用）
 传输格式（固定）
-[4 bytes length][protobuf payload]
+proto文件:../proto/search.proto
 
-
-length：uint32 little-endian
-
-payload：protobuf binary
-
-Protobuf（只生成 Client 代码）
-syntax = "proto3";
-
-package search.ipc;
-
-message PingReq {}
-message PingResp {
-  string version = 1;
-}
-
-message BuildIndexReq {
-  repeated string roots = 1;
-}
-
-message BuildIndexResp {
-  bool success = 1;
-  uint64 indexed_files = 2;
-}
-
-message SearchReq {
-  string keyword = 1;
-  uint32 limit = 2;
-}
-
-message SearchResp {
-  repeated SearchResult results = 1;
-}
-
-message SearchResult {
-  string path = 1;
-  string filename = 2;
-}
 
 6️⃣ Qt 工程结构（必须按此拆）
 qt_gui/
@@ -140,18 +103,12 @@ PipeClient 行为
 
 提供同步 API：
 
-bool connect();
-QByteArray request(const QByteArray& payload);
-
-Length + Protobuf 编解码
-send:
-  uint32 length
-  protobuf bytes
-
-recv:
-  read 4 bytes
-  read length bytes
-
+### Implementing Qt Client
+The Qt client should implement the same IPC protocol:
+1. Connect to `\\.\pipe\listory_plus_search`
+2. Send messages with format: `[1 byte type][4 bytes length][payload]`
+3. Read responses with format: `[4 bytes length][payload]`
+4. Use Qt's Protobuf support or manual encoding
 
 不做 streaming
 
@@ -198,7 +155,6 @@ UI 线程只负责刷新界面
 
 CMakeLists.txt
 
-search.proto
 
 IPC Client（pipe_client）
 
@@ -229,3 +185,9 @@ Qt 程序能独立运行
 双击可打开文件
 
 UI 无明显卡顿
+
+接下来的工作：
+1. 完成QT开发环境搭建，配置好可构建的cmakefile，能够成功构建该项目
+QT Cteator已安装，cvpkg已安装，propttobuf已使用cvpkg安装，visual studio已安装，但是构建报错，cmakefile未配置正确
+2. 写一个测试IPC通讯的主窗口测试
+3. 

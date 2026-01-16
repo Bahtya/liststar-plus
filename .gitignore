@@ -6,6 +6,8 @@
 # Cargo
 Cargo.lock
 
+**/build/
+
 # Qt/C++ Build artifacts
 /qt_gui/build/
 /qt_gui/build-*/

@@ -39,31 +39,8 @@ cd vcpkg
 
 ## 构建步骤
 
-### 方法 1：使用 CMake 命令行
 
-```bash
-# 进入 qt_gui 目录
-cd D:\Project\listory-plus\qt_gui
-
-# 创建构建目录
-mkdir build
-cd build
-
-# 配置项目（根据实际路径修改）
-cmake .. ^
-  -DCMAKE_PREFIX_PATH="C:/Qt/6.5.0/msvc2019_64" ^
-  -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" ^
-  -G "Visual Studio 17 2022" ^
-  -A x64
-
-# 构建项目
-cmake --build . --config Release
-
-# 运行程序
-Release\listory_search.exe
-```
-
-### 方法 2：使用 Qt Creator（推荐新手）
+### 方法 1：使用 Qt Creator（推荐新手）
 
 1. 打开 Qt Creator
 2. 文件 → 打开文件或项目
@@ -72,7 +49,7 @@ Release\listory_search.exe
 5. 点击左下角的 "构建" 按钮（锤子图标）
 6. 点击 "运行" 按钮（绿色三角形）
 
-### 方法 3：使用 Visual Studio
+### 方法 2：使用 Visual Studio
 
 ```bash
 # 生成 Visual Studio 解决方案
@@ -180,10 +157,3 @@ int main(int argc, char *argv[]) {
 
 ### 热重载 QML
 修改 QML 文件后，程序会自动重新加载（Qt 6 特性）。
-
-## 下一步
-
-1. 确保 Rust 搜索引擎 `searchd.exe` 已构建
-2. 将 `searchd.exe` 放在与 `listory_search.exe` 相同的目录
-3. 运行 UI 程序会自动启动搜索引擎
-4. 输入关键词测试搜索功能

@@ -142,7 +142,7 @@ void SearchBackend::performSearch(const QString& keyword) {
         beginResetModel();
         m_results.clear();
 
-        for (int i  resp.results_size(); ++i) {
+        for (int i = 0; i < resp.results_size(); ++i) {
             const auto& result = resp.results(i);
             m_results.append(model::SearchResult(
                 QString::fromStdString(result.filename()),

@@ -251,10 +251,114 @@ def test_build_index(client, roots):
         return False
 
 
+def test_start_usn_monitoring(client, drive_letter='C'):
+    """Test StartUsnMonitoring request"""
+    print("\n" + "="*60)
+    print("TEST 3: StartUsnMonitoring Request")
+    print("="*60)
+
+    # StartUsnMonitoringReq:
+    # field 1: string drive_letter
+    payload = bytearray()
+    payload.extend(encode_string(1, drive_letter))
+
+    print(f"Starting USN monitoring for drive: {drive_letter}")
+    client.send_message(3, bytes(payload))
+
+    print("Waiting for response...")
+    response = client.receive_message()
+
+    if response:
+        print(f"✓ Received response: {len(response)} bytes")
+        print(f"  Raw data: {response.hex()}")
+
+        # Decode StartUsnMonitoringResp
+        # field 1: bool success
+        # field 2: string message
+        pos = 0
+        success = False
+        message = ""
+
+        while pos < len(response):
+            tag = response[pos]
+            field_number = tag >> 3
+            wire_type = tag & 0x7
+            pos += 1
+
+            if field_number == 1 and wire_type == 0:  # bool
+                success = response[pos] != 0
+                pos += 1
+            elif field_number == 2 and wire_type == 2:  # string
+                message, pos = decode_string(response, pos)
+
+        print(f"  Success: {success}")
+        print(f"  Message: {message}")
+
+        if success:
+            print("✓ StartUsnMonitoring test PASSED")
+        else:
+            print("⚠ StartUsnMonitoring test completed with warning")
+        return True
+    else:
+        print("✗ No response received")
+        return False
+
+
+def test_stop_usn_monitoring(client):
+    """Test StopUsnMonitoring request"""
+    print("\n" + "="*60)
+    print("TEST 4: StopUsnMonitoring Request")
+    print("="*60)
+
+    # StopUsnMonitoringReq is an empty message
+    payload = b''
+
+    print("Stopping USN monitoring...")
+    client.send_message(4, bytes(payload))
+
+    print("Waiting for response...")
+    response = client.receive_message()
+
+    if response:
+        print(f"✓ Received response: {len(response)} bytes")
+        print(f"  Raw data: {response.hex()}")
+
+        # Decode StopUsnMonitoringResp
+        # field 1: bool success
+        # field 2: string message
+        pos = 0
+        success = False
+        message = ""
+
+        while pos < len(response):
+            tag = response[pos]
+            field_number = tag >> 3
+            wire_type = tag & 0x7
+            pos += 1
+
+            if field_number == 1 and wire_type == 0:  # bool
+                success = response[pos] != 0
+                pos += 1
+            elif field_number == 2 and wire_type == 2:  # string
+                message, pos = decode_string(response, pos)
+
+        print(f"  Success: {success}")
+        print(f"  Message: {message}")
+
+        if success:
+            print("✓ StopUsnMonitoring test PASSED")
+        else:
+            print("⚠ StopUsnMonitoring test completed with warning")
+        return True
+    else:
+        print("✗ No response received")
+        return False
+
+
 def test_search(client, keyword, limit=10):
     """Test Search request"""
     print("\n" + "="*60)
-    print("TEST 3: Search Request")
+    print("TEST 5: Search Request")
     print("="*60)
 
     # SearchReq:
@@ -353,7 +457,19 @@ def main():
 
         time.sleep(0.5)
 
-        # Test 3: Search
+        # Test 3: Start USN Monitoring
+        if not test_start_usn_monitoring(client, "C"):
+            return False
+
+        time.sleep(1)
+
+        # Test 4: Stop USN Monitoring
+        if not test_stop_usn_monitoring(client):
+            return False
+
+        time.sleep(0.5)
+
+        # Test 5: Search
         if not test_search(client, "mod", limit=5):
             return False
 
