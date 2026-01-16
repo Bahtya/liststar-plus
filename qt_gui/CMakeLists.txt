@@ -17,6 +17,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Concurrent)
 
 # Find Protobuf (vcpkg will provide it automatically if CMAKE_TOOLCHAIN_FILE is set)
 find_package(Protobuf REQUIRED)
+find_package(absl REQUIRED)
 
 # Generate protobuf files
 set(PROTO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/proto/search.proto)
@@ -63,8 +64,47 @@ target_link_libraries(listory_search PRIVATE
     Qt6::Gui
     Qt6::Quick
     Qt6::Concurrent
-    ${Protobuf_LIBRARIES}
+    protobuf::libprotobuf
 )
+
+# Fix MSVC-specific linker flags when using MinGW with vcpkg MSVC libraries
+if(MINGW)
+    # Function to recursively clean MSVC flags from a target and its dependencies
+    function(clean_msvc_flags target)
+        if(TARGET ${target})
+            get_target_property(link_libs ${target} INTERFACE_LINK_LIBRARIES)
+            if(link_libs)
+                set(cleaned_libs "")
+                foreach(lib ${link_libs})
+                    # Skip MSVC-specific flags
+                    if(NOT lib MATCHES "^-ignore:" AND NOT lib MATCHES "^/IGNORE:")
+                        list(APPEND cleaned_libs ${lib})
+                        # Recursively clean dependencies
+                        if(TARGET ${lib})
+                            clean_msvc_flags(${lib})
+                        endif()
+                    endif()
+                endforeach()
+                set_target_properties(${target} PROPERTIES INTERFACE_LINK_LIBRARIES "${cleaned_libs}")
+            endif()
+
+            # Also clean INTERFACE_LINK_OPTIONS
+            get_target_property(link_opts ${target} INTERFACE_LINK_OPTIONS)
+            if(link_opts)
+                set(cleaned_opts "")
+                foreach(opt ${link_opts})
+                    if(NOT opt MATCHES "^-ignore:" AND NOT opt MATCHES "^/IGNORE:")
+                        list(APPEND cleaned_opts ${opt})
+                    endif()
+                endforeach()
+                set_target_properties(${target} PROPERTIES INTERFACE_LINK_OPTIONS "${cleaned_opts}")
+            endif()
+        endif()
+    endfunction()
+
+    # Clean protobuf and its dependencies
+    clean_msvc_flags(protobuf::libprotobuf)
+endif()
 
 # Windows specific settings
 if(WIN32)

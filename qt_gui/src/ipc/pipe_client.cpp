@@ -213,7 +213,7 @@ QByteArray PipeClient::readData() {
     }
 
     // Return the complete message (length + payload) for codec
- ray result;
+    QByteArray result;
     result.append(lengthBuf, 4);
     result.append(payload);
     return result;

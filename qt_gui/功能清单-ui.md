@@ -187,7 +187,6 @@ Qt 程序能独立运行
 UI 无明显卡顿
 
 接下来的工作：
-1. 完成QT开发环境搭建，配置好可构建的cmakefile，能够成功构建该项目
-QT Cteator已安装，cvpkg已安装，propttobuf已使用cvpkg安装，visual studio已安装，但是构建报错，cmakefile未配置正确
+1. 完成QT开发环境搭建
 2. 写一个测试IPC通讯的主窗口测试
 3. 
