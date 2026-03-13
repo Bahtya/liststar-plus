@@ -1,0 +1,78 @@
+{
+  "project": "Listory Plus v2",
+  "version": "0.1.0",
+  "features": [
+    {
+      "id": "ui_refinement",
+      "name": "UI 精致化",
+      "description": "极简主义重构，类 Spotlight 体验，高渲染性能",
+      "passes": true
+    },
+    {
+      "id": "mft_scanning",
+      "name": "MFT 并发扫描",
+      "description": "多驱动器并发扫描，百万级文件秒级索引",
+      "passes": true
+    },
+    {
+      "id": "usn_monitoring",
+      "name": "USN 实时监听",
+      "description": "实时监听文件系统变更并异步更新索引",
+      "passes": true
+    },
+    {
+      "id": "memory_index",
+      "name": "内存索引构建",
+      "description": "高效内存树形结构，搜索延迟 < 50ms",
+      "passes": true
+    },
+    {
+      "id": "keyboard_interaction",
+      "name": "键盘优先交互",
+      "description": "全流程快捷键支持，脱离鼠标操作",
+      "passes": true
+    },
+    {
+      "id": "context_menu",
+      "name": "右键菜单支持",
+      "description": "支持路径复制、文件夹打开等常用操作",
+      "passes": true
+    },
+    {
+      "id": "status_bar",
+      "name": "状态栏信息显示",
+      "description": "实时显示引擎状态、文件计数及搜索耗时",
+      "passes": true
+    },
+    {
+      "id": "multi_drive_support",
+      "name": "多驱动器支持",
+      "description": "自动识别并索引系统中所有 NTFS 分区",
+      "passes": true
+    },
+    {
+      "id": "admin_privilege",
+      "name": "管理员权限自动处理",
+      "description": "确保底层驱动器访问权限，提供友好的权限提示",
+      "passes": true
+    },
+    {
+      "id": "search_algorithm",
+      "name": "极速搜索算法",
+      "description": "支持拼音、模糊匹配及 Everything 风格的高级搜索",
+      "passes": true
+    },
+    {
+      "id": "file_operations",
+      "name": "文件打开与定位",
+      "description": "双击打开文件，支持定位到资源管理器",
+      "passes": true
+    },
+    {
+      "id": "tauri_bridge",
+      "name": "Tauri Command 容错机制",
+      "description": "后端崩溃不影响 UI 响应，具备自动恢复能力",
+      "passes": true
+    }
+  ]
+}

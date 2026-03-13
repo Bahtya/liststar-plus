@@ -1,0 +1,52 @@
+# Listory Plus v2 设计文档 (Maestro & Anthropic Harness)
+
+## 1. 问题陈述
+Listory Plus 是一款针对 Windows 的极速文件搜索引擎 MVP。项目已从 Qt/C++ 迁移至 **Tauri (Rust) + React (TypeScript)** 架构。为了将其推向生产可用状态，我们需要解决以下核心问题：
+
+- **UI/UX 精致化**：按照 `ui-ux-pro-max` 哲学进行极简主义重构，确保高渲染性能和键盘优先的类 Spotlight 体验。
+- **后端功能完备性**：深度集成 USN Journal 实时监控和“Everything 风格”索引架构，支持百万级文件的秒级搜索和实时增量更新。
+- **可验证的并行开发**：实施 **Anthropic "Harness"** 方法论。通过 `feature_list.json` 和 `init.sh` 建立一个具备管理员权限、可验证的环境，支持多代理并行开发。
+
+## 2. 需求说明
+
+### 功能性需求
+- **UI 优化**：响应式、键盘优先界面；双击打开、右键菜单（路径复制等）；状态栏引擎/文件计数显示。
+- **MFT 全量索引**：多驱动器并发扫描，构建高效内存树形结构。
+- **USN 增量监控**：实时监听文件系统变更并异步更新索引。
+- **性能指标**：搜索延迟 < 50ms；索引构建 > 50k files/s。
+
+### 非功能性需求
+- **安全性**：管理员权限下的底层驱动器访问。
+- **稳定性**：Tauri Command 容错机制，防止后端崩溃导致 UI 假死。
+- **可验证性**：所有 Feature 必须配备对应的自动化测试用例。
+
+### 约束
+- **系统**：仅限 Windows 10/11。
+- **技术栈**：Tauri v2, React (Vite), Rust (windows-rs)。
+
+## 3. 架构方案 (Approach 1: Feature-Driven Maestro Harness)
+我们将构建一个基于 Feature 隔离的开发体系：
+
+- **Harness 层**：由 `feature_list.json` 驱动。`init.sh` 脚本确保每个 Agent 都在相同的管理员上下文和 Rust 工具链环境中运行。
+- **Tauri Core**：Rust 后端处理 `windows-rs` 句柄，通过 `MemoryIndex` 提供查询。
+- **React UI**：基于状态机（Zustand/Query）管理搜索列表，遵循 `ui-ux-pro-max` 极简风格。
+
+## 4. 代理团队与协作流程
+采用 Anthropic 建议的“初始化-编码-测试”闭环：
+
+- **Initializer (TechLead)**：定义 `feature_list.json` 和 `init.sh`。
+- **DevOps Engineer**：负责管理员权限下的 Windows 开发环境与 Rust 工具链安装。
+- **Coder (多个并行实例)**：领取单一任务，在独立分支实现功能。
+- **Tester (自动化验证官)**：运行测试并翻转 `feature_list.json` 中的 `passes` 位。
+- **Code Reviewer**：进行安全性与性能审计。
+
+## 5. 风险评估
+- **管理员权限竞争**：通过后端 Rust 的 `RwLock` 读写隔离缓解。
+- **构建环境污染**：通过 DevOps 生成的 `init.sh` 强制对齐环境。
+- **合并冲突**：通过“一个 Feature 一个分支”策略和 Tester 预测试缓解。
+
+## 6. 成功标准
+- 所有 `feature_list.json` 中的 Feature `passes: true`。
+- 百万文件规模下搜索响应低于 50ms。
+- UI 符合极简主义风格，且能通过快捷键全流程操作。
+- `init.sh` 能在干净的管理员环境中一键恢复开发状态。
