@@ -47,7 +47,14 @@ mod arc_str_serde {
 }
 
 impl FileEntry {
-    pub fn new(drive_letter: char, file_ref: u64, parent_ref: u64, name: String, size: u64, attributes: u32) -> Self {
+    pub fn new(
+        drive_letter: char,
+        file_ref: u64,
+        parent_ref: u64,
+        name: String,
+        size: u64,
+        attributes: u32,
+    ) -> Self {
         Self {
             drive_letter,
             file_ref,

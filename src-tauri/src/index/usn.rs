@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
 use std::mem;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::Ioctl::{FSCTL_QUERY_USN_JOURNAL, FSCTL_READ_USN_JOURNAL};
 use windows::Win32::System::IO::DeviceIoControl;
 
-use crate::model::FileEntry;
 use super::{MemoryIndex, SendHandle};
+use crate::model::FileEntry;
 
 // USN Journal structures (simplified)
 #[repr(C)]
@@ -70,7 +70,12 @@ pub struct UsnMonitor {
 
 impl UsnMonitor {
     /// Create a new USN monitor for a volume
-    pub fn new(drive_letter: char, volume_handle: SendHandle, index: Arc<RwLock<MemoryIndex>>, stop_flag: Arc<AtomicBool>) -> Result<Self> {
+    pub fn new(
+        drive_letter: char,
+        volume_handle: SendHandle,
+        index: Arc<RwLock<MemoryIndex>>,
+        stop_flag: Arc<AtomicBool>,
+    ) -> Result<Self> {
         let journal_data = query_usn_journal(volume_handle.0)?;
 
         Ok(Self {
@@ -85,7 +90,10 @@ impl UsnMonitor {
 
     /// Start monitoring USN journal changes
     pub async fn start_monitoring(&mut self) -> Result<()> {
-        log::info!("Starting USN journal monitoring for drive {}...", self.drive_letter);
+        log::info!(
+            "Starting USN journal monitoring for drive {}...",
+            self.drive_letter
+        );
 
         loop {
             if self.stop_flag.load(Ordering::Relaxed) {
@@ -96,7 +104,11 @@ impl UsnMonitor {
             match self.read_usn_changes().await {
                 Ok(()) => {}
                 Err(e) => {
-                    log::error!("Error reading USN changes for drive {}: {}", self.drive_letter, e);
+                    log::error!(
+                        "Error reading USN changes for drive {}: {}",
+                        self.drive_letter,
+                        e
+                    );
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
             }
@@ -111,7 +123,9 @@ impl UsnMonitor {
     async fn read_usn_changes(&mut self) -> Result<()> {
         let read_data = READ_USN_JOURNAL_DATA {
             start_usn: self.next_usn,
-            reason_mask: USN_REASON_FILE_CREATE | USN_REASON_FILE_DELETE | USN_REASON_RENAME_NEW_NAME,
+            reason_mask: USN_REASON_FILE_CREATE
+                | USN_REASON_FILE_DELETE
+                | USN_REASON_RENAME_NEW_NAME,
             return_only_on_close: 0,
             timeout: 0,
             bytes_to_wait_for: 0,
@@ -138,7 +152,8 @@ impl UsnMonitor {
             }
         }
 
-        self.process_usn_records(&buffer[..bytes_returned as usize]).await?;
+        self.process_usn_records(&buffer[..bytes_returned as usize])
+            .await?;
 
         Ok(())
     }
@@ -170,7 +185,12 @@ impl UsnMonitor {
     }
 
     /// Handle a single USN record
-    async fn handle_usn_record(&self, record: &USN_RECORD, buffer: &[u8], offset: usize) -> Result<()> {
+    async fn handle_usn_record(
+        &self,
+        record: &USN_RECORD,
+        buffer: &[u8],
+        offset: usize,
+    ) -> Result<()> {
         let filename_offset = offset + record.file_name_offset as usize;
         let filename_length = record.file_name_length as usize;
 
@@ -194,7 +214,11 @@ impl UsnMonitor {
         let mut index = self.index.write().await;
 
         if record.reason & USN_REASON_FILE_CREATE != 0 {
-            log::debug!("File created: {} (ref: {})", filename, record.file_reference_number);
+            log::debug!(
+                "File created: {} (ref: {})",
+                filename,
+                record.file_reference_number
+            );
             let entry = FileEntry::new(
                 self.drive_letter,
                 record.file_reference_number,
@@ -204,13 +228,19 @@ impl UsnMonitor {
                 record.file_attributes,
             );
             index.add_entry(entry);
-
         } else if record.reason & USN_REASON_FILE_DELETE != 0 {
-            log::debug!("File deleted: {} (ref: {})", filename, record.file_reference_number);
+            log::debug!(
+                "File deleted: {} (ref: {})",
+                filename,
+                record.file_reference_number
+            );
             index.remove_entry(self.drive_letter, record.file_reference_number);
-
         } else if record.reason & USN_REASON_RENAME_NEW_NAME != 0 {
-            log::debug!("File renamed: {} (ref: {})", filename, record.file_reference_number);
+            log::debug!(
+                "File renamed: {} (ref: {})",
+                filename,
+                record.file_reference_number
+            );
             let entry = FileEntry::new(
                 self.drive_letter,
                 record.file_reference_number,
