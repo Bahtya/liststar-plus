@@ -25,14 +25,7 @@ mod tests {
             0,
         ));
 
-        index.add_entry(FileEntry::new(
-            'C',
-            2,
-            0,
-            "image.png".to_string(),
-            2048,
-            0,
-        ));
+        index.add_entry(FileEntry::new('C', 2, 0, "image.png".to_string(), 2048, 0));
 
         let results = search_filename(&index, "doc", 10);
         assert_eq!(results.len(), 1);

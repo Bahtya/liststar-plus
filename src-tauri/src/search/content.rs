@@ -1,6 +1,6 @@
+use crate::model::FileEntry;
 use anyhow::{Context, Result};
 use std::process::Command;
-use crate::model::FileEntry;
 
 /// Search file content using ripgrep
 pub fn search_content(keyword: &str, roots: &[String], limit: usize) -> Result<Vec<FileEntry>> {

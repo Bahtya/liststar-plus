@@ -1,6 +1,6 @@
+use crate::model::FileEntry;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::model::FileEntry;
 
 /// High-performance memory index using Vec-based architecture
 /// Inspired by Everything: sequential scan with SIMD optimization potential
@@ -95,7 +95,10 @@ impl MemoryIndex {
         // Sequential scan through all entries
         for entry in &self.entries {
             // Skip removed entries (check if still in map)
-            if !self.file_ref_map.contains_key(&(entry.drive_letter, entry.file_ref)) {
+            if !self
+                .file_ref_map
+                .contains_key(&(entry.drive_letter, entry.file_ref))
+            {
                 continue;
             }
 

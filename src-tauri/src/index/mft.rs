@@ -5,14 +5,13 @@ use tokio::sync::RwLock;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ,
-    FILE_SHARE_WRITE, OPEN_EXISTING,
+    CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 use windows::Win32::System::Ioctl::{FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL};
 use windows::Win32::System::IO::DeviceIoControl;
 
-use crate::model::FileEntry;
 use super::MemoryIndex;
+use crate::model::FileEntry;
 
 // USN Journal structures
 #[repr(C)]
@@ -66,7 +65,10 @@ pub async fn build_mft_index(root: &str, index: Arc<RwLock<MemoryIndex>>) -> Res
     // Check if this is a root drive (e.g., C:\, D:\)
     if is_root_drive_path(root) {
         let drive_letter = extract_drive_letter(root)?;
-        log::debug!("Root drive detected, using MFT enumeration for drive {}", drive_letter);
+        log::debug!(
+            "Root drive detected, using MFT enumeration for drive {}",
+            drive_letter
+        );
 
         // Try MFT-based indexing first
         match build_mft_index_fast(drive_letter, index.clone()).await {
@@ -75,7 +77,10 @@ pub async fn build_mft_index(root: &str, index: Arc<RwLock<MemoryIndex>>) -> Res
                 Ok(count)
             }
             Err(e) => {
-                log::warn!("MFT-based indexing failed: {}, falling back to filesystem walk", e);
+                log::warn!(
+                    "MFT-based indexing failed: {}, falling back to filesystem walk",
+                    e
+                );
                 let mut count = 0u64;
                 walk_directory(root, index, &mut count).await?;
                 Ok(count)
@@ -101,10 +106,18 @@ async fn build_mft_index_fast(drive_letter: char, index: Arc<RwLock<MemoryIndex>
 }
 
 /// Enumerate all MFT records using FSCTL_ENUM_USN_DATA
-async fn enumerate_mft_records(volume_handle: SendHandle, drive_letter: char, index: Arc<RwLock<MemoryIndex>>) -> Result<u64> {
+async fn enumerate_mft_records(
+    volume_handle: SendHandle,
+    drive_letter: char,
+    index: Arc<RwLock<MemoryIndex>>,
+) -> Result<u64> {
     // Query USN Journal to get valid USN range
     let journal_data = query_usn_journal(volume_handle.0)?;
-    log::debug!("USN Journal: first_usn={}, next_usn={}", journal_data.first_usn, journal_data.next_usn);
+    log::debug!(
+        "USN Journal: first_usn={}, next_usn={}",
+        journal_data.first_usn,
+        journal_data.next_usn
+    );
 
     let mut enum_data = MFT_ENUM_DATA_V0 {
         start_file_reference_number: 0,
@@ -172,7 +185,7 @@ async fn enumerate_mft_records(volume_handle: SendHandle, drive_letter: char, in
                         record.file_reference_number,
                         record.parent_file_reference_number,
                         filename,
-                        0,  // size - not available from USN records
+                        0, // size - not available from USN records
                         record.file_attributes,
                     );
                     batch.push(file_entry);
@@ -197,7 +210,11 @@ async fn enumerate_mft_records(volume_handle: SendHandle, drive_letter: char, in
         }
     }
 
-    log::info!("MFT enumeration complete for drive {}: {} files indexed", drive_letter, count);
+    log::info!(
+        "MFT enumeration complete for drive {}: {} files indexed",
+        drive_letter,
+        count
+    );
     Ok(count)
 }
 
@@ -247,7 +264,11 @@ fn extract_drive_letter(path: &str) -> Result<char> {
 }
 
 /// Recursively walk directory and add files to index (fallback method)
-async fn walk_directory(path: &str, index: Arc<RwLock<MemoryIndex>>, count: &mut u64) -> Result<()> {
+async fn walk_directory(
+    path: &str,
+    index: Arc<RwLock<MemoryIndex>>,
+    count: &mut u64,
+) -> Result<()> {
     let entries = match std::fs::read_dir(path) {
         Ok(entries) => entries,
         Err(e) => {
@@ -274,7 +295,7 @@ async fn walk_directory(path: &str, index: Arc<RwLock<MemoryIndex>>, count: &mut
             if let Some(filename) = path_buf.file_name() {
                 let filename_str = filename.to_string_lossy().to_string();
                 let file_entry = FileEntry::from_path_filename(path_str.clone(), filename_str);
-                
+
                 let mut idx = index.write().await;
                 idx.add_entry(file_entry);
                 *count += 1;
@@ -295,7 +316,10 @@ async fn walk_directory(path: &str, index: Arc<RwLock<MemoryIndex>>, count: &mut
 /// Get volume handle for USN operations
 pub fn get_volume_handle(drive_letter: char) -> Result<HANDLE> {
     let volume_path = format!("\\\\.\\{}:", drive_letter);
-    let wide_path: Vec<u16> = volume_path.encode_utf16().chain(std::iter::once(0)).collect();
+    let wide_path: Vec<u16> = volume_path
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
 
     unsafe {
         let handle = CreateFileW(
@@ -327,7 +351,10 @@ pub fn close_volume_handle(handle: HANDLE) {
 fn is_root_drive_path(path: &str) -> bool {
     let path_chars: Vec<char> = path.chars().collect();
 
-    if path_chars.len() == 3 && path_chars[1] == ':' && (path_chars[2] == '\\' || path_chars[2] == '/') {
+    if path_chars.len() == 3
+        && path_chars[1] == ':'
+        && (path_chars[2] == '\\' || path_chars[2] == '/')
+    {
         return path_chars[0].is_ascii_alphabetic();
     }
 
